@@ -1,0 +1,8 @@
+{
+  "name": "Remix CityOS 2030 | Autonomous Smart City Digital Twin",
+  "description": "Autonomous Smart City Digital Twin \u0026 Operating System featuring real-time multi-subsystem simulation (Energy Grid, Water Distribution, Waste Logistics, AQI Environment), City Brain multi-agent optimizer, and scenario stress testing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
