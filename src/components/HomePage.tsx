@@ -24,6 +24,8 @@ import {
 import { CityNexusLogo } from './CityNexusLogo';
 import { useCitySimulation } from '../context/CitySimulationContext';
 import { District } from '../types/cityos';
+import heroSmartCityImg from '../assets/images/hero_smart_city_digital_twin_1791902313796.jpg';
+import controlCenterImg from '../assets/images/smart_grid_control_center_1791902312670.jpg';
 
 interface HomePageProps {
   onNavigate: (tabId: string) => void;
@@ -197,9 +199,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           {/* Hero Right Render Image */}
           <div className="lg:col-span-5 relative min-h-[260px] lg:min-h-full overflow-hidden">
             <img 
-              src="/src/assets/images/hero_smart_city_digital_twin_1791902313796.jpg" 
+              src={heroSmartCityImg} 
               alt="City Nexus Smart City Metropolis"
-              referrerPolicy="no-referrer"
               className="w-full h-full object-cover object-center lg:absolute lg:inset-0 opacity-85 hover:scale-105 transition-transform duration-700"
             />
             <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-slate-950 via-slate-950/30 to-transparent" />
@@ -391,9 +392,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
           <div className="lg:col-span-6 relative h-64 lg:h-full min-h-[240px]">
             <img 
-              src="/src/assets/images/smart_grid_control_center_1791902312670.jpg" 
+              src={controlCenterImg} 
               alt="City Nexus Operations Command Center"
-              referrerPolicy="no-referrer"
               className="w-full h-full object-cover object-center"
             />
             <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-transparent via-slate-950/30 to-slate-950" />
