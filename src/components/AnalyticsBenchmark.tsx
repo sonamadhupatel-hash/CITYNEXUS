@@ -16,7 +16,10 @@ import {
   Trash2,
   Wind,
   Layers,
-  Sparkles
+  Sparkles,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { BENCHMARK_COMPARISONS } from '../data/cityData';
 import { formatCrores, formatINR } from '../utils/formatters';
@@ -25,6 +28,45 @@ export const AnalyticsBenchmark: React.FC = () => {
   const [cityPopulation, setCityPopulation] = useState<number>(648000);
   const [activeGraphTab, setActiveGraphTab] = useState<'comparison_bars' | 'savings_trajectory' | 'budget_breakdown'>('savings_trajectory');
   const [hoveredYear, setHoveredYear] = useState<number | null>(null);
+
+  // Zoom states for benchmark graphs (100% to 250%)
+  const [savingsZoom, setSavingsZoom] = useState<number>(1);
+  const [barsZoom, setBarsZoom] = useState<number>(1);
+  const [budgetZoom, setBudgetZoom] = useState<number>(1);
+
+  const renderZoomToolbar = (zoom: number, setZoom: React.Dispatch<React.SetStateAction<number>>, label: string) => (
+    <div className="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800 text-xs shrink-0 shadow-sm">
+      <span className="text-[10px] text-slate-500 font-mono uppercase mr-0.5">Zoom:</span>
+      <button
+        onClick={() => setZoom(prev => Math.max(1, parseFloat((prev - 0.25).toFixed(2))))}
+        disabled={zoom <= 1}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom Out ${label} (-)`}
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <span className="font-mono text-cyan-300 font-bold px-1 min-w-[38px] text-center text-[11px]">
+        {Math.round(zoom * 100)}%
+      </span>
+      <button
+        onClick={() => setZoom(prev => Math.min(2.5, parseFloat((prev + 0.25).toFixed(2))))}
+        disabled={zoom >= 2.5}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom In ${label} (+)`}
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+      {zoom > 1 && (
+        <button
+          onClick={() => setZoom(1)}
+          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          title="Reset Zoom to 100%"
+        >
+          <RotateCcw className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
 
   // Scaled calculations based on population scale factor (reference: 648,000)
   const scale = cityPopulation / 648000;
@@ -356,137 +398,149 @@ export const AnalyticsBenchmark: React.FC = () => {
               <span className="font-medium text-slate-300">
                 10-Year Cumulative Municipal Returns vs Initial CapEx Investment in <strong>Indian Rupees (₹ Crores)</strong>
               </span>
-              <div className="flex items-center gap-4 text-[11px] font-mono">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 bg-emerald-400 inline-block" /> Cumulative Savings (₹ Cr)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Initial CapEx Baseline ({formatCrores(initialCapexINR)})
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block" /> Break-Even Point (1.8 Yrs)
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-0.5 bg-emerald-400 inline-block" /> Cumulative Savings (₹ Cr)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Initial CapEx Baseline ({formatCrores(initialCapexINR)})
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block" /> Break-Even Point (1.8 Yrs)
+                  </span>
+                </div>
+                {renderZoomToolbar(savingsZoom, setSavingsZoom, '10-Yr Trajectory')}
               </div>
             </div>
 
             {/* SVG Trajectory Chart Container (Fully Bounded, No Overlap) */}
             <div className="w-full bg-slate-900/60 p-4 sm:p-5 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-              <div className="w-full overflow-x-auto">
-                <svg viewBox="0 0 900 270" className="w-full h-auto min-w-[560px] max-h-[320px] block select-none" preserveAspectRatio="xMidYMid meet">
-                  {/* Horizontal Gridlines & Y-Axis Labels in ₹ Crores */}
-                  {[0, 500, 1000, 1500, 2000, 2500, 3000].map((crVal) => {
-                    const y = 205 - (crVal / 3000) * 160;
-                    return (
-                      <g key={crVal}>
-                        <line x1="75" y1={y} x2="780" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                        <text x="65" y={y + 3.5} fill="#64748b" fontSize="10.5" textAnchor="end" fontFamily="monospace">
-                          ₹{crVal} Cr
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Initial CapEx Reference Line (Red Dashed) */}
-                  {(() => {
-                    const capexCr = initialCapexINR / 10000000;
-                    const capexY = 205 - (capexCr / 3000) * 160;
-                    return (
-                      <g>
-                        <line x1="75" y1={capexY} x2="780" y2={capexY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 3" />
-                        <rect x="660" y={capexY - 18} width="118" height="15" rx="3" fill="#450a0a" stroke="#b91c1c" strokeWidth="0.8" />
-                        <text x="774" y={capexY - 7} fill="#fca5a5" fontSize="9" fontWeight="bold" textAnchor="end" fontFamily="monospace">
-                          CapEx: ₹{capexCr.toFixed(0)} Cr
-                        </text>
-                      </g>
-                    );
-                  })()}
-
-                  {/* Shaded Cumulative Savings Area */}
-                  <path
-                    d={`M 75 205 ${trajectoryPoints.map((tp, idx) => {
-                      const x = 75 + (idx / 10) * 705;
-                      const crVal = tp.cumulativeSavingsINR / 10000000;
+              {savingsZoom > 1 && (
+                <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-md border border-emerald-800/60 mb-2.5 flex items-center justify-between">
+                  <span>↔ Scroll horizontally to inspect 10-year cumulative savings numbers at {Math.round(savingsZoom * 100)}% resolution</span>
+                  <button onClick={() => setSavingsZoom(1)} className="hover:text-emerald-200 underline">Reset 100%</button>
+                </div>
+              )}
+              <div className="w-full overflow-x-auto pb-1">
+                <div style={{ width: `${Math.round(100 * savingsZoom)}%`, minWidth: `${Math.round(850 * savingsZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                  <svg viewBox="0 0 900 270" className="w-full h-auto max-h-[340px] block select-none" preserveAspectRatio="none">
+                    {/* Horizontal Gridlines & Y-Axis Labels in ₹ Crores */}
+                    {[0, 500, 1000, 1500, 2000, 2500, 3000].map((crVal) => {
                       const y = 205 - (crVal / 3000) * 160;
-                      return `L ${x} ${y}`;
-                    }).join(' ')} L 780 205 Z`}
-                    fill="#10b981"
-                    fillOpacity="0.16"
-                  />
-
-                  {/* Trajectory Solid Curve */}
-                  <polyline
-                    points={trajectoryPoints.map((tp, idx) => {
-                      const x = 75 + (idx / 10) * 705;
-                      const crVal = tp.cumulativeSavingsINR / 10000000;
-                      const y = 205 - (crVal / 3000) * 160;
-                      return `${x},${y}`;
-                    }).join(' ')}
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3.5"
-                  />
-
-                  {/* Break-Even Marker at Year 1.8 */}
-                  {(() => {
-                    const beX = 75 + (1.8 / 10) * 705;
-                    const capexCr = initialCapexINR / 10000000;
-                    const beY = 205 - (capexCr / 3000) * 160;
-                    return (
-                      <g>
-                        <line x1={beX} y1="36" x2={beX} y2="205" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 3" />
-                        <circle cx={beX} cy={beY} r="5.5" fill="#06b6d4" stroke="#ffffff" strokeWidth="2" />
-                        <rect x={beX - 52} y="16" width="104" height="18" rx="4" fill="#083344" stroke="#0891b2" strokeWidth="1" />
-                        <text x={beX} y="28.5" fill="#38bdf8" fontSize="9" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-                          Break-Even: 1.8 Yrs
-                        </text>
-                      </g>
-                    );
-                  })()}
-
-                  {/* Year Data Markers & Interactive Hover Rings */}
-                  {trajectoryPoints.map((tp, idx) => {
-                    const x = 75 + (idx / 10) * 705;
-                    const crVal = tp.cumulativeSavingsINR / 10000000;
-                    const y = 205 - (crVal / 3000) * 160;
-                    const isHovered = hoveredYear === tp.year;
-
-                    return (
-                      <g 
-                        key={idx}
-                        className="cursor-pointer"
-                        onMouseEnter={() => setHoveredYear(tp.year)}
-                        onMouseLeave={() => setHoveredYear(null)}
-                      >
-                        <circle 
-                          cx={x} 
-                          cy={y} 
-                          r={isHovered ? 6 : 4} 
-                          fill={isHovered ? '#38bdf8' : '#10b981'} 
-                          stroke="#0f172a" 
-                          strokeWidth="2" 
-                        />
-                        {/* Year X Label */}
-                        <text x={x} y="226" fill="#94a3b8" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                          Y{tp.year}
-                        </text>
-                        {/* Show value on key years */}
-                        {(tp.year === 1 || tp.year === 3 || tp.year === 5 || tp.year === 10 || isHovered) && (
-                          <text 
-                            x={x} 
-                            y={y - 10} 
-                            fill={isHovered ? '#38bdf8' : '#e2e8f0'} 
-                            fontSize="9.5" 
-                            fontWeight="bold" 
-                            textAnchor="middle" 
-                            fontFamily="monospace"
-                          >
-                            ₹{tp.cumulativeSavingsCr}Cr
+                      return (
+                        <g key={crVal}>
+                          <line x1="75" y1={y} x2="780" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                          <text x="65" y={y + 3.5} fill="#64748b" fontSize="10.5" textAnchor="end" fontFamily="monospace">
+                            ₹{crVal} Cr
                           </text>
-                        )}
-                      </g>
-                    );
-                  })}
-                </svg>
+                        </g>
+                      );
+                    })}
+
+                    {/* Initial CapEx Reference Line (Red Dashed) */}
+                    {(() => {
+                      const capexCr = initialCapexINR / 10000000;
+                      const capexY = 205 - (capexCr / 3000) * 160;
+                      return (
+                        <g>
+                          <line x1="75" y1={capexY} x2="780" y2={capexY} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="6 3" />
+                          <rect x="660" y={capexY - 18} width="118" height="15" rx="3" fill="#450a0a" stroke="#b91c1c" strokeWidth="0.8" />
+                          <text x="774" y={capexY - 7} fill="#fca5a5" fontSize="9" fontWeight="bold" textAnchor="end" fontFamily="monospace">
+                            CapEx: ₹{capexCr.toFixed(0)} Cr
+                          </text>
+                        </g>
+                      );
+                    })()}
+
+                    {/* Shaded Cumulative Savings Area */}
+                    <path
+                      d={`M 75 205 ${trajectoryPoints.map((tp, idx) => {
+                        const x = 75 + (idx / 10) * 705;
+                        const crVal = tp.cumulativeSavingsINR / 10000000;
+                        const y = 205 - (crVal / 3000) * 160;
+                        return `L ${x} ${y}`;
+                      }).join(' ')} L 780 205 Z`}
+                      fill="#10b981"
+                      fillOpacity="0.16"
+                    />
+
+                    {/* Trajectory Solid Curve */}
+                    <polyline
+                      points={trajectoryPoints.map((tp, idx) => {
+                        const x = 75 + (idx / 10) * 705;
+                        const crVal = tp.cumulativeSavingsINR / 10000000;
+                        const y = 205 - (crVal / 3000) * 160;
+                        return `${x},${y}`;
+                      }).join(' ')}
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="3.5"
+                    />
+
+                    {/* Break-Even Marker at Year 1.8 */}
+                    {(() => {
+                      const beX = 75 + (1.8 / 10) * 705;
+                      const capexCr = initialCapexINR / 10000000;
+                      const beY = 205 - (capexCr / 3000) * 160;
+                      return (
+                        <g>
+                          <line x1={beX} y1="36" x2={beX} y2="205" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <circle cx={beX} cy={beY} r="5.5" fill="#06b6d4" stroke="#ffffff" strokeWidth="2" />
+                          <rect x={beX - 52} y="16" width="104" height="18" rx="4" fill="#083344" stroke="#0891b2" strokeWidth="1" />
+                          <text x={beX} y={28.5} fill="#38bdf8" fontSize="9" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                            Break-Even: 1.8 Yrs
+                          </text>
+                        </g>
+                      );
+                    })()}
+
+                    {/* Year Data Markers & Interactive Hover Rings */}
+                    {trajectoryPoints.map((tp, idx) => {
+                      const x = 75 + (idx / 10) * 705;
+                      const crVal = tp.cumulativeSavingsINR / 10000000;
+                      const y = 205 - (crVal / 3000) * 160;
+                      const isHovered = hoveredYear === tp.year;
+                      const showValue = savingsZoom >= 1.25 || tp.year === 1 || tp.year === 3 || tp.year === 5 || tp.year === 10 || isHovered;
+
+                      return (
+                        <g 
+                          key={idx}
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredYear(tp.year)}
+                          onMouseLeave={() => setHoveredYear(null)}
+                        >
+                          <circle 
+                            cx={x} 
+                            cy={y} 
+                            r={isHovered ? 6 : 4} 
+                            fill={isHovered ? '#38bdf8' : '#10b981'} 
+                            stroke="#0f172a" 
+                            strokeWidth="2" 
+                          />
+                          {/* Year X Label */}
+                          <text x={x} y="226" fill="#94a3b8" fontSize="10" textAnchor="middle" fontFamily="monospace">
+                            Y{tp.year}
+                          </text>
+                          {/* Show value on key years or on all years when zoomed in */}
+                          {showValue && (
+                            <text 
+                              x={x} 
+                              y={y - 10} 
+                              fill={isHovered ? '#38bdf8' : '#e2e8f0'} 
+                              fontSize={savingsZoom >= 1.25 ? "8.5" : "9.5"} 
+                              fontWeight="bold" 
+                              textAnchor="middle" 
+                              fontFamily="monospace"
+                            >
+                              ₹{tp.cumulativeSavingsCr}Cr
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
               </div>
             </div>
 
@@ -517,72 +571,86 @@ export const AnalyticsBenchmark: React.FC = () => {
         {/* ------------------------------------------------------------- */}
         {activeGraphTab === 'comparison_bars' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
               <span className="font-medium text-slate-300">
                 Side-by-Side Co-Simulation Benchmark: Unmanaged Baseline vs City Nexus
               </span>
-              <div className="flex items-center gap-4 text-[11px] font-mono">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-rose-500/70 inline-block" /> Legacy Baseline
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-cyan-500 inline-block" /> City Nexus (Optimized)
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-rose-500/70 inline-block" /> Legacy Baseline
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-cyan-500 inline-block" /> City Nexus (Optimized)
+                  </span>
+                </div>
+                {renderZoomToolbar(barsZoom, setBarsZoom, 'Benchmark Bars')}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visualComparisonMetrics.map((item, idx) => {
-                const basePct = (item.baseline / item.maxScale) * 100;
-                const optPct = (item.cityOs / item.maxScale) * 100;
-                const isSaved = item.changePct < 0;
+            {barsZoom > 1 && (
+              <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-md border border-cyan-800/60 mb-2 flex items-center justify-between">
+                <span>↔ Scroll horizontally to inspect all comparative infrastructure metrics at {Math.round(barsZoom * 100)}% resolution</span>
+                <button onClick={() => setBarsZoom(1)} className="hover:text-cyan-200 underline">Reset 100%</button>
+              </div>
+            )}
 
-                return (
-                  <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                        {item.icon} {item.label}
-                      </span>
-                      <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                        isSaved ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                      }`}>
-                        {item.changePct}%
-                      </span>
-                    </div>
+            <div className="w-full overflow-x-auto pb-1">
+              <div style={{ width: `${Math.round(100 * barsZoom)}%`, minWidth: `${Math.round(750 * barsZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visualComparisonMetrics.map((item, idx) => {
+                    const basePct = (item.baseline / item.maxScale) * 100;
+                    const optPct = (item.cityOs / item.maxScale) * 100;
+                    const isSaved = item.changePct < 0;
 
-                    {/* Dual Horizontal Bar Chart */}
-                    <div className="space-y-2 pt-1">
-                      {/* Baseline Bar */}
-                      <div>
-                        <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-1">
-                          <span>Legacy Baseline</span>
-                          <span className="text-rose-400 font-bold">{item.baselineDisplay}</span>
+                    return (
+                      <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                            {item.icon} {item.label}
+                          </span>
+                          <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                            isSaved ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          }`}>
+                            {item.changePct}%
+                          </span>
                         </div>
-                        <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-rose-600 to-rose-500 rounded-full transition-all duration-700" 
-                            style={{ width: `${Math.min(100, basePct)}%` }}
-                          />
+
+                        {/* Dual Horizontal Bar Chart */}
+                        <div className="space-y-2 pt-1">
+                          {/* Baseline Bar */}
+                          <div>
+                            <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-1">
+                              <span>Legacy Baseline</span>
+                              <span className="text-rose-400 font-bold">{item.baselineDisplay}</span>
+                            </div>
+                            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-rose-600 to-rose-500 rounded-full transition-all duration-700" 
+                                style={{ width: `${Math.min(100, basePct)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* City Nexus Bar */}
+                          <div>
+                            <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-1">
+                              <span>City Nexus</span>
+                              <span className="text-cyan-300 font-bold">{item.cityOsDisplay}</span>
+                            </div>
+                            <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-700" 
+                                style={{ width: `${Math.min(100, optPct)}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
-
-                      {/* City Nexus Bar */}
-                      <div>
-                        <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-1">
-                          <span>City Nexus</span>
-                          <span className="text-cyan-300 font-bold">{item.cityOsDisplay}</span>
-                        </div>
-                        <div className="h-3 w-full bg-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-700" 
-                            style={{ width: `${Math.min(100, optPct)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -596,52 +664,68 @@ export const AnalyticsBenchmark: React.FC = () => {
               <span className="font-medium text-slate-300">
                 Annual Municipal Savings Breakdown by Infrastructure Subsystem: <strong>{formatCrores(scaledAnnualSavingsINR)} / yr</strong>
               </span>
-              <span className="font-mono text-emerald-400">ALL CALCULATIONS IN RUPEES (₹)</span>
-            </div>
-
-            {/* Segmented Stacked Bar Representation */}
-            <div className="space-y-2">
-              <div className="h-6 w-full bg-slate-800 rounded-xl overflow-hidden flex shadow-inner">
-                {savingsBreakdown.map((sb, idx) => (
-                  <div
-                    key={idx}
-                    style={{ width: `${sb.pct}%`, backgroundColor: sb.color }}
-                    className="h-full relative group transition-all"
-                    title={`${sb.domain}: ${sb.pct}% (${formatCrores(sb.amountINR)})`}
-                  />
-                ))}
-              </div>
-
-              {/* Stacked Bar Legend */}
-              <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 pt-1">
-                {savingsBreakdown.map((sb, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: sb.color }} />
-                    <span>{sb.domain} ({sb.pct}%)</span>
-                  </div>
-                ))}
+              <div className="flex items-center gap-4">
+                <span className="font-mono text-emerald-400">ALL CALCULATIONS IN RUPEES (₹)</span>
+                {renderZoomToolbar(budgetZoom, setBudgetZoom, 'Budget Allocation')}
               </div>
             </div>
 
-            {/* Subsystem Allocation Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {savingsBreakdown.map((sb, idx) => (
-                <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-white flex items-center gap-1.5">
-                      {sb.icon} {sb.domain}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-cyan-400">{sb.pct}%</span>
+            {budgetZoom > 1 && (
+              <div className="text-[10px] font-mono text-indigo-400 bg-indigo-950/40 px-3 py-1 rounded-md border border-indigo-800/60 mb-2 flex items-center justify-between">
+                <span>↔ Scroll horizontally to inspect subsystem budget allocations at {Math.round(budgetZoom * 100)}% resolution</span>
+                <button onClick={() => setBudgetZoom(1)} className="hover:text-indigo-200 underline">Reset 100%</button>
+              </div>
+            )}
+
+            <div className="w-full overflow-x-auto pb-1">
+              <div style={{ width: `${Math.round(100 * budgetZoom)}%`, minWidth: `${Math.round(750 * budgetZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                <div className="space-y-6">
+                  {/* Segmented Stacked Bar Representation */}
+                  <div className="space-y-2">
+                    <div className="h-6 w-full bg-slate-800 rounded-xl overflow-hidden flex shadow-inner">
+                      {savingsBreakdown.map((sb, idx) => (
+                        <div
+                          key={idx}
+                          style={{ width: `${sb.pct}%`, backgroundColor: sb.color }}
+                          className="h-full relative group transition-all"
+                          title={`${sb.domain}: ${sb.pct}% (${formatCrores(sb.amountINR)})`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Stacked Bar Legend */}
+                    <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 pt-1">
+                      {savingsBreakdown.map((sb, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: sb.color }} />
+                          <span>{sb.domain} ({sb.pct}%)</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="text-xl font-bold font-mono text-white pt-1">
-                    {formatCrores(sb.amountINR)}
+                  {/* Subsystem Allocation Cards Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {savingsBreakdown.map((sb, idx) => (
+                      <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-white flex items-center gap-1.5">
+                            {sb.icon} {sb.domain}
+                          </span>
+                          <span className="font-mono text-xs font-bold text-cyan-400">{sb.pct}%</span>
+                        </div>
+
+                        <div className="text-xl font-bold font-mono text-white pt-1">
+                          {formatCrores(sb.amountINR)}
+                        </div>
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                          ₹{(sb.amountINR / 100000).toFixed(0)} Lakh / year
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <span className="text-[10px] text-slate-400 block font-mono">
-                    ₹{(sb.amountINR / 100000).toFixed(0)} Lakh / year
-                  </span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         )}

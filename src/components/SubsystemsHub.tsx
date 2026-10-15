@@ -18,7 +18,10 @@ import {
   Thermometer,
   Volume2,
   TreeDeciduous,
-  Clock
+  Clock,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { useCitySimulation } from '../context/CitySimulationContext';
 import { SubsystemType } from '../types/cityos';
@@ -36,6 +39,44 @@ export const SubsystemsHub: React.FC = () => {
   } = useCitySimulation();
 
   const [activeSubsystem, setActiveSubsystem] = useState<SubsystemType>('energy');
+  const [energyZoom, setEnergyZoom] = useState<number>(1);
+  const [waterZoom, setWaterZoom] = useState<number>(1);
+  const [envZoom, setEnvZoom] = useState<number>(1);
+  const [wasteZoom, setWasteZoom] = useState<number>(1);
+
+  const renderZoomToolbar = (zoom: number, setZoom: React.Dispatch<React.SetStateAction<number>>, label: string) => (
+    <div className="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800 text-xs">
+      <span className="text-[10px] text-slate-500 font-mono uppercase mr-0.5">Zoom:</span>
+      <button
+        onClick={() => setZoom(prev => Math.max(1, parseFloat((prev - 0.25).toFixed(2))))}
+        disabled={zoom <= 1}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom Out ${label} (-)`}
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <span className="font-mono text-cyan-300 font-bold px-1 min-w-[38px] text-center text-[11px]">
+        {Math.round(zoom * 100)}%
+      </span>
+      <button
+        onClick={() => setZoom(prev => Math.min(2.5, parseFloat((prev + 0.25).toFixed(2))))}
+        disabled={zoom >= 2.5}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom In ${label} (+)`}
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+      {zoom > 1 && (
+        <button
+          onClick={() => setZoom(1)}
+          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          title="Reset Zoom to 100%"
+        >
+          <RotateCcw className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -173,24 +214,34 @@ export const SubsystemsHub: React.FC = () => {
                 </p>
               </div>
 
-              {/* Chart Legend */}
-              <div className="flex items-center gap-4 text-xs">
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-rose-500 inline-block" /> Baseline Demand
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-cyan-400 inline-block" /> City Nexus Shaved
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-2 bg-amber-500/30 border border-amber-400 inline-block" /> Solar PV
-                </span>
+              {/* Chart Legend & Zoom Controls */}
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-rose-500 inline-block" /> Baseline Demand
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-cyan-400 inline-block" /> City Nexus Shaved
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-2 bg-amber-500/30 border border-amber-400 inline-block" /> Solar PV
+                  </span>
+                </div>
+                {renderZoomToolbar(energyZoom, setEnergyZoom, 'Power Dispatch')}
               </div>
             </div>
 
             {/* SVG Visual Dispatch Chart */}
             <div className="w-full bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-              <div className="w-full overflow-x-auto">
-                <svg viewBox="0 0 820 230" className="w-full h-auto min-w-[560px] max-h-[280px] block select-none" preserveAspectRatio="xMidYMid meet">
+              {energyZoom > 1 && (
+                <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-md border border-cyan-800/60 mb-2.5 flex items-center justify-between">
+                  <span>↔ Scroll horizontally to inspect all 24-hour dispatch values at {Math.round(energyZoom * 100)}% resolution</span>
+                  <button onClick={() => setEnergyZoom(1)} className="hover:text-cyan-200 underline">Reset 100%</button>
+                </div>
+              )}
+              <div className="w-full overflow-x-auto pb-1">
+                <div style={{ width: `${Math.round(100 * energyZoom)}%`, minWidth: `${Math.round(750 * energyZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                  <svg viewBox="0 0 820 230" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
                   {/* Horizontal gridlines */}
                   {[0, 50, 100, 150].map((val) => {
                     const y = 200 - (val / 160) * 175;
@@ -250,18 +301,28 @@ export const SubsystemsHub: React.FC = () => {
                   </text>
                 </g>
 
-                {/* X Axis Time Labels */}
-                {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                  const x = 40 + (hr / 23) * 740;
+                {/* Show exact numerical values on all points when zoomed in */}
+                {energyZoom >= 1.25 && hourlyProfiles.map((p, idx) => {
+                  const x = 40 + (idx / 23) * 740;
+                  const optY = 220 - (p.optimizedEnergyMW / 160) * 200;
+                  const baseY = 220 - (p.baselineEnergyMW / 160) * 200;
                   return (
-                    <text key={hr} x={x} y="234" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                      {String(hr).padStart(2, '0')}:00
-                    </text>
+                    <g key={idx}>
+                      <circle cx={x} cy={baseY} r="2.5" fill="#ef4444" />
+                      <text x={x} y={baseY - 7} fill="#f87171" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                        {p.baselineEnergyMW.toFixed(0)}M
+                      </text>
+                      <circle cx={x} cy={optY} r="3" fill="#06b6d4" />
+                      <text x={x} y={optY + 11} fill="#22d3ee" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                        {p.optimizedEnergyMW.toFixed(0)}M
+                      </text>
+                    </g>
                   );
                 })}
               </svg>
             </div>
           </div>
+        </div>
 
             {/* Quick Interactive Actuator for Energy */}
             <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
@@ -426,22 +487,32 @@ export const SubsystemsHub: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-2 bg-blue-500/20 border border-blue-400 inline-block rounded-xs" /> Water Demand (m³/h)
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-cyan-400 inline-block" /> Regulated Pressure (bar)
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unmanaged Pressure (bar)
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-2 bg-blue-500/20 border border-blue-400 inline-block rounded-xs" /> Water Demand (m³/h)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-cyan-400 inline-block" /> Regulated Pressure (bar)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unmanaged Pressure (bar)
+                  </span>
+                </div>
+                {renderZoomToolbar(waterZoom, setWaterZoom, 'Water Demand')}
               </div>
             </div>
 
             <div className="w-full bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-              <div className="w-full overflow-x-auto">
-                <svg viewBox="0 0 820 220" className="w-full h-auto min-w-[560px] max-h-[270px] block select-none" preserveAspectRatio="xMidYMid meet">
+              {waterZoom > 1 && (
+                <div className="text-[10px] font-mono text-blue-400 bg-blue-950/40 px-3 py-1 rounded-md border border-blue-800/60 mb-2.5 flex items-center justify-between">
+                  <span>↔ Scroll horizontally to inspect water demand and pressure values at {Math.round(waterZoom * 100)}% resolution</span>
+                  <button onClick={() => setWaterZoom(1)} className="hover:text-blue-200 underline">Reset 100%</button>
+                </div>
+              )}
+              <div className="w-full overflow-x-auto pb-1">
+                <div style={{ width: `${Math.round(100 * waterZoom)}%`, minWidth: `${Math.round(750 * waterZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                  <svg viewBox="0 0 820 220" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
                   {/* Horizontal gridlines */}
                   {[0, 4000, 8000, 12000, 16000].map((val) => {
                     const y = 180 - (val / 16000) * 150;
@@ -510,13 +581,23 @@ export const SubsystemsHub: React.FC = () => {
                   </text>
                 </g>
 
-                {/* X Axis Time Labels */}
-                {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                  const x = 40 + (hr / 23) * 740;
+                {/* Numerical Values displayed when zoomed in */}
+                {waterZoom >= 1.25 && hourlyProfiles.map((p, idx) => {
+                  const x = 40 + (idx / 23) * 740;
+                  const y = 190 - (p.waterDemandM3 / 16000) * 160;
+                  const bar = idx >= 7 && idx <= 20 ? 4.1 : 3.4;
+                  const barY = 190 - (bar / 6) * 160;
                   return (
-                    <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                      {String(hr).padStart(2, '0')}:00
-                    </text>
+                    <g key={idx}>
+                      <circle cx={x} cy={y} r="3" fill="#60a5fa" />
+                      <text x={x} y={y - 7} fill="#93c5fd" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                        {(p.waterDemandM3 / 1000).toFixed(1)}k
+                      </text>
+                      <circle cx={x} cy={barY} r="2.5" fill="#22d3ee" />
+                      <text x={x} y={barY + 11} fill="#67e8f9" fontSize="7" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                        {bar}b
+                      </text>
+                    </g>
                   );
                 })}
               </svg>
@@ -524,7 +605,8 @@ export const SubsystemsHub: React.FC = () => {
           </div>
         </div>
       </div>
-    )}
+    </div>
+  )}
 
       {/* ========================================================= */}
       {/* 3. WASTE MANAGEMENT VIEW */}
@@ -637,12 +719,24 @@ export const SubsystemsHub: React.FC = () => {
                 </p>
               </div>
 
-              <div className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-800">
-                -423 KM SAVED DAILY (-29.8%)
+              <div className="flex items-center gap-3">
+                <div className="text-xs font-mono text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded border border-emerald-800">
+                  -423 KM SAVED DAILY (-29.8%)
+                </div>
+                {renderZoomToolbar(wasteZoom, setWasteZoom, 'Waste Logistics')}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            {wasteZoom > 1 && (
+              <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-md border border-emerald-800/60 mb-2 flex items-center justify-between">
+                <span>↔ Scroll horizontally to inspect fleet mileage and district bin fill levels at {Math.round(wasteZoom * 100)}% resolution</span>
+                <button onClick={() => setWasteZoom(1)} className="hover:text-emerald-200 underline">Reset 100%</button>
+              </div>
+            )}
+
+            <div className="w-full overflow-x-auto pb-1">
+              <div style={{ width: `${Math.round(100 * wasteZoom)}%`, minWidth: `${Math.round(750 * wasteZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
               {/* Daily Mileage Comparison Bars (5 cols) */}
               <div className="lg:col-span-5 bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
                 <span className="text-xs font-bold text-slate-300 block">Fleet Travel Distance Comparison</span>
@@ -702,7 +796,9 @@ export const SubsystemsHub: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  )}
 
       {/* ========================================================= */}
       {/* 4. ENVIRONMENT & AQI VIEW */}
@@ -824,22 +920,32 @@ export const SubsystemsHub: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-amber-400 inline-block" /> Ambient AQI
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unhealthy Limit (100)
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <span className="w-3 h-2 bg-cyan-500/20 border border-cyan-400 inline-block rounded-xs" /> Mist Scrubbing Active
-                </span>
+              <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-amber-400 inline-block" /> Ambient AQI
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unhealthy Limit (100)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-slate-400">
+                    <span className="w-3 h-2 bg-cyan-500/20 border border-cyan-400 inline-block rounded-xs" /> Mist Scrubbing Active
+                  </span>
+                </div>
+                {renderZoomToolbar(envZoom, setEnvZoom, 'Air Quality')}
               </div>
             </div>
 
             <div className="w-full bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-              <div className="w-full overflow-x-auto">
-                <svg viewBox="0 0 820 220" className="w-full h-auto min-w-[560px] max-h-[270px] block select-none" preserveAspectRatio="xMidYMid meet">
+              {envZoom > 1 && (
+                <div className="text-[10px] font-mono text-amber-400 bg-amber-950/40 px-3 py-1 rounded-md border border-amber-800/60 mb-2.5 flex items-center justify-between">
+                  <span>↔ Scroll horizontally to inspect atmospheric particulate AQI at {Math.round(envZoom * 100)}% resolution</span>
+                  <button onClick={() => setEnvZoom(1)} className="hover:text-amber-200 underline">Reset 100%</button>
+                </div>
+              )}
+              <div className="w-full overflow-x-auto pb-1">
+                <div style={{ width: `${Math.round(100 * envZoom)}%`, minWidth: `${Math.round(750 * envZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                  <svg viewBox="0 0 820 220" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
                   {/* Horizontal gridlines */}
                   {[0, 50, 100, 150].map((val) => {
                     const y = 180 - (val / 160) * 150;
@@ -889,13 +995,17 @@ export const SubsystemsHub: React.FC = () => {
                   </text>
                 </g>
 
-                {/* X Axis Time Labels */}
-                {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                  const x = 40 + (hr / 23) * 740;
+                {/* Numerical AQI Values when zoomed in */}
+                {envZoom >= 1.25 && hourlyProfiles.map((p, idx) => {
+                  const x = 40 + (idx / 23) * 740;
+                  const y = 190 - (p.aqi / 160) * 160;
                   return (
-                    <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                      {String(hr).padStart(2, '0')}:00
-                    </text>
+                    <g key={idx}>
+                      <circle cx={x} cy={y} r="3" fill="#f59e0b" />
+                      <text x={x} y={y - 7} fill="#fcd34d" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                        {p.aqi}
+                      </text>
+                    </g>
                   );
                 })}
               </svg>
@@ -903,7 +1013,8 @@ export const SubsystemsHub: React.FC = () => {
           </div>
         </div>
       </div>
-    )}
+    </div>
+  )}
     </div>
   );
 };

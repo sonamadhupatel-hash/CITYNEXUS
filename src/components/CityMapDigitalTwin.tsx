@@ -14,7 +14,10 @@ import {
   CheckCircle2,
   Sliders,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { useCitySimulation } from '../context/CitySimulationContext';
 import { District, SubsystemType } from '../types/cityos';
@@ -39,6 +42,7 @@ export const CityMapDigitalTwin: React.FC = () => {
 
   const [isDeepScanOpen, setIsDeepScanOpen] = useState<boolean>(false);
   const [isTuneDistrictOpen, setIsTuneDistrictOpen] = useState<boolean>(false);
+  const [mapZoom, setMapZoom] = useState<number>(1);
 
   // Spatial layer toggles
   const [layers, setLayers] = useState({
@@ -121,6 +125,39 @@ export const CityMapDigitalTwin: React.FC = () => {
             <Wind className="w-3 h-3 text-amber-400" />
             <span>AQI Heatmap</span>
           </button>
+
+          {/* Map Zoom in / Zoom out toolbar */}
+          <div className="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800 text-xs ml-auto">
+            <span className="text-[10px] text-slate-500 font-mono uppercase mr-0.5">Zoom:</span>
+            <button
+              onClick={() => setMapZoom(prev => Math.max(1, parseFloat((prev - 0.25).toFixed(2))))}
+              disabled={mapZoom <= 1}
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Zoom Out Map (-)"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <span className="font-mono text-cyan-300 font-bold px-1 min-w-[38px] text-center text-[11px]">
+              {Math.round(mapZoom * 100)}%
+            </span>
+            <button
+              onClick={() => setMapZoom(prev => Math.min(2.0, parseFloat((prev + 0.25).toFixed(2))))}
+              disabled={mapZoom >= 2.0}
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Zoom In Map (+)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            {mapZoom > 1 && (
+              <button
+                onClick={() => setMapZoom(1)}
+                className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                title="Reset Zoom to 100%"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -131,13 +168,21 @@ export const CityMapDigitalTwin: React.FC = () => {
           {/* Subtle Ambient Grid Background */}
           <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
 
-          {/* Interactive SVG Map */}
-          <div className="relative aspect-[16/10] w-full">
-            <svg 
-              viewBox="0 0 1000 620" 
-              className="w-full h-full select-none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+          {mapZoom > 1 && (
+            <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-md border border-cyan-800/60 mb-2.5 flex items-center justify-between relative z-10">
+              <span>↔ Scroll or drag to pan across districts at {Math.round(mapZoom * 100)}% digital twin resolution</span>
+              <button onClick={() => setMapZoom(1)} className="hover:text-cyan-200 underline">Reset 100%</button>
+            </div>
+          )}
+
+          {/* Interactive SVG Map with smooth zoom */}
+          <div className="relative aspect-[16/10] w-full overflow-auto rounded-xl">
+            <div style={{ width: `${Math.round(100 * mapZoom)}%`, minWidth: `${Math.round(750 * mapZoom)}px`, height: '100%', transition: 'all 0.2s ease-out' }}>
+              <svg 
+                viewBox="0 0 1000 620" 
+                className="w-full h-full select-none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
               <defs>
                 {/* Gradients for districts */}
                 <linearGradient id="grad_greenbelt" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -372,7 +417,8 @@ export const CityMapDigitalTwin: React.FC = () => {
                   <circle cx="790" cy="510" r="4.5" fill="#ef4444" stroke="#ffffff" strokeWidth="1" />
                 </g>
               )}
-            </svg>
+              </svg>
+            </div>
           </div>
 
           {/* Interactive Map Footer Status Legend */}

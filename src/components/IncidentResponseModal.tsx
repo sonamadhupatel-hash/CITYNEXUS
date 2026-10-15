@@ -18,7 +18,9 @@ import {
   Layers,
   MapPin,
   Flame,
-  FileText
+  FileText,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { useCitySimulation } from '../context/CitySimulationContext';
 import { ShockScenario } from '../types/cityos';
@@ -45,6 +47,42 @@ export const IncidentResponseModal: React.FC<IncidentResponseModalProps> = ({
     currentHour,
     currentMinute
   } = useCitySimulation();
+
+  const [incidentZoom, setIncidentZoom] = useState<number>(1);
+
+  const renderZoomToolbar = () => (
+    <div className="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800 text-xs shrink-0 shadow-sm">
+      <span className="text-[10px] text-slate-500 font-mono uppercase mr-0.5">Zoom:</span>
+      <button
+        onClick={() => setIncidentZoom(prev => Math.max(1, parseFloat((prev - 0.25).toFixed(2))))}
+        disabled={incidentZoom <= 1}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title="Zoom Out Transient Curve (-)"
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <span className="font-mono text-cyan-300 font-bold px-1 min-w-[38px] text-center text-[11px]">
+        {Math.round(incidentZoom * 100)}%
+      </span>
+      <button
+        onClick={() => setIncidentZoom(prev => Math.min(2.5, parseFloat((prev + 0.25).toFixed(2))))}
+        disabled={incidentZoom >= 2.5}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title="Zoom In Transient Curve (+)"
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+      {incidentZoom > 1 && (
+        <button
+          onClick={() => setIncidentZoom(1)}
+          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          title="Reset Zoom to 100%"
+        >
+          <RotateCcw className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
 
   // If there's an active shock, inspect that; otherwise inspectedScenario or fallback to scenario 2
   const selectedScenario: ShockScenario = inspectedScenario || activeShock || SHOCK_SCENARIOS[1];
@@ -254,8 +292,8 @@ export const IncidentResponseModal: React.FC<IncidentResponseModalProps> = ({
                     </p>
                   </div>
 
-                  {/* Chart Legend */}
-                  <div className="flex items-center gap-3 text-[11px] font-mono">
+                  {/* Chart Legend & Zoom Toolbar */}
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
                     <span className="flex items-center gap-1.5 text-slate-400">
                       <span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Shock Anomaly Spike
                     </span>
@@ -265,83 +303,118 @@ export const IncidentResponseModal: React.FC<IncidentResponseModalProps> = ({
                     <span className="flex items-center gap-1.5 text-slate-400">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" /> Isolation Point (8m)
                     </span>
+                    {renderZoomToolbar()}
                   </div>
                 </div>
 
                 {/* SVG Visual Transient Response Curve Container (Strictly Bounded) */}
                 <div className="w-full bg-slate-900/40 p-3 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox="0 0 820 220" className="w-full h-auto min-w-[560px] max-h-[280px] block select-none" preserveAspectRatio="xMidYMid meet">
-                      {/* Gridlines */}
-                      {[0, 25, 50, 75, 100].map((val) => {
-                        const y = 190 - (val / 100) * 160;
-                        return (
-                          <g key={val}>
-                            <line x1="48" y1={y} x2="780" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                            <text x="42" y={y + 4} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
-                              {val}%
+                  {incidentZoom > 1 && (
+                    <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-md border border-cyan-800/60 mb-2.5 flex items-center justify-between">
+                      <span>↔ Scroll horizontally to inspect the emergency restabilization curve at {Math.round(incidentZoom * 100)}% resolution</span>
+                      <button onClick={() => setIncidentZoom(1)} className="hover:text-cyan-200 underline">Reset 100%</button>
+                    </div>
+                  )}
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div style={{ width: `${Math.round(100 * incidentZoom)}%`, minWidth: `${Math.round(750 * incidentZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                      <svg viewBox="0 0 820 220" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
+                        {/* Gridlines */}
+                        {[0, 25, 50, 75, 100].map((val) => {
+                          const y = 190 - (val / 100) * 160;
+                          return (
+                            <g key={val}>
+                              <line x1="48" y1={y} x2="780" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                              <text x="42" y={y + 4} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
+                                {val}%
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Unmanaged failure cascade (Red line plunging or surging uncontrolled) */}
+                        <path
+                          d="M 48 160 L 160 160 L 220 30 L 320 20 L 500 15 L 780 10"
+                          fill="none"
+                          stroke="#ef4444"
+                          strokeWidth="2.5"
+                          strokeDasharray="5 3"
+                        />
+                        <text x="775" y="24" fill="#ef4444" fontSize="9" fontWeight="bold" textAnchor="end" fontFamily="monospace">
+                          Legacy SCADA: Catastrophic Collapse (10% capacity)
+                        </text>
+
+                        {/* City Nexus Autonomous Recovery (Cyan line recovering smoothly) */}
+                        <path
+                          d="M 48 160 L 160 160 L 220 40 L 280 90 L 340 140 L 440 155 L 780 158"
+                          fill="none"
+                          stroke="#06b6d4"
+                          strokeWidth="3.5"
+                        />
+                        <text x="775" y="148" fill="#22d3ee" fontSize="9.5" fontWeight="bold" textAnchor="end" fontFamily="monospace">
+                          City Nexus: 8-Min Valve Isolation & Restabilization (98.7% nominal)
+                        </text>
+
+                        {/* Milestone Markers */}
+                        {/* Event Start Marker */}
+                        <g transform="translate(160, 0)">
+                          <line x1="0" y1="20" x2="0" y2="190" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <circle cx="0" cy="160" r="4.5" fill="#f43f5e" stroke="#ffffff" strokeWidth="1.5" />
+                          <rect x="-35" y="14" width="70" height="16" rx="3" fill="#881337" />
+                          <text x="0" y="25" fill="#fecdd3" fontSize="8.5" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
+                            RUPTURE (0m)
+                          </text>
+                        </g>
+
+                        {/* Isolation Marker at 340 */}
+                        <g transform="translate(340, 0)">
+                          <line x1="0" y1="20" x2="0" y2="190" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" />
+                          <circle cx="0" cy="140" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
+                          <rect x="-42" y="14" width="84" height="16" rx="3" fill="#064e3b" />
+                          <text x="0" y="25" fill="#a7f3d0" fontSize="8.5" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
+                            ISOLATED (8m)
+                          </text>
+                        </g>
+
+                        {/* Detailed Transient Checkpoint Numbers when zoomed in */}
+                        {incidentZoom >= 1.25 && (
+                          <g>
+                            {/* Point 1: Rupture impact */}
+                            <circle cx="220" cy="40" r="3.5" fill="#f59e0b" />
+                            <text x="220" y="55" fill="#fcd34d" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                              Shock Peak (T+3m)
+                            </text>
+                            {/* Point 2: Throttle mitigation */}
+                            <circle cx="280" cy="90" r="3.5" fill="#06b6d4" />
+                            <text x="280" y="82" fill="#22d3ee" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                              PRV Throttle 56%
+                            </text>
+                            {/* Point 3: Post-isolation stabilization */}
+                            <circle cx="440" cy="155" r="3.5" fill="#10b981" />
+                            <text x="440" y="170" fill="#34d399" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                              92% Pressure Restored (T+15m)
+                            </text>
+                            {/* Point 4: Nominal steady state */}
+                            <circle cx="780" cy="158" r="3.5" fill="#06b6d4" />
+                            <text x="750" y="175" fill="#38bdf8" fontSize="7.5" fontWeight="bold" textAnchor="end" fontFamily="monospace">
+                              98.7% Steady State (T+60m)
                             </text>
                           </g>
-                        );
-                      })}
+                        )}
 
-                      {/* Unmanaged failure cascade (Red line plunging or surging uncontrolled) */}
-                      <path
-                        d="M 48 160 L 160 160 L 220 30 L 320 20 L 500 15 L 780 10"
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="2.5"
-                        strokeDasharray="5 3"
-                      />
-                      <text x="775" y="24" fill="#ef4444" fontSize="9" fontWeight="bold" textAnchor="end" fontFamily="monospace">
-                        Legacy SCADA: Catastrophic Collapse
-                      </text>
-
-                      {/* City Nexus Autonomous Recovery (Cyan line recovering smoothly) */}
-                      <path
-                        d="M 48 160 L 160 160 L 220 40 L 280 90 L 340 140 L 440 155 L 780 158"
-                        fill="none"
-                        stroke="#06b6d4"
-                        strokeWidth="3.5"
-                      />
-                      <text x="775" y="148" fill="#22d3ee" fontSize="9.5" fontWeight="bold" textAnchor="end" fontFamily="monospace">
-                        City Nexus: 8-Min Valve Isolation & Restabilization
-                      </text>
-
-                    {/* Milestone Markers */}
-                    {/* Event Start Marker */}
-                    <g transform="translate(160, 0)">
-                      <line x1="0" y1="20" x2="0" y2="190" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="3 3" />
-                      <circle cx="0" cy="160" r="4.5" fill="#f43f5e" stroke="#ffffff" strokeWidth="1.5" />
-                      <rect x="-35" y="14" width="70" height="16" rx="3" fill="#881337" />
-                      <text x="0" y="25" fill="#fecdd3" fontSize="8.5" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
-                        RUPTURE (0m)
-                      </text>
-                    </g>
-
-                    {/* Isolation Marker at 340 */}
-                    <g transform="translate(340, 0)">
-                      <line x1="0" y1="20" x2="0" y2="190" stroke="#10b981" strokeWidth="1.5" strokeDasharray="3 3" />
-                      <circle cx="0" cy="140" r="5" fill="#10b981" stroke="#ffffff" strokeWidth="1.5" />
-                      <rect x="-42" y="14" width="84" height="16" rx="3" fill="#064e3b" />
-                      <text x="0" y="25" fill="#a7f3d0" fontSize="8.5" textAnchor="middle" fontWeight="bold" fontFamily="monospace">
-                        ISOLATED (8m)
-                      </text>
-                    </g>
-
-                    {/* X Axis Timeline Labels */}
-                    {['T-10m', 'T+0m', 'T+5m', 'T+15m', 'T+30m', 'T+60m', 'T+120m'].map((label, idx) => {
-                      const x = 40 + (idx / 6) * 740;
-                      return (
-                        <text key={idx} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                          {label}
-                        </text>
-                      );
-                    })}
-                  </svg>
+                        {/* X Axis Timeline Labels */}
+                        {['T-10m', 'T+0m', 'T+5m', 'T+15m', 'T+30m', 'T+60m', 'T+120m'].map((label, idx) => {
+                          const x = 40 + (idx / 6) * 740;
+                          return (
+                            <text key={idx} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
+                              {label}
+                            </text>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
               {/* 4 Quantitative Impact KPI Cards (Indian Rupees Included) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

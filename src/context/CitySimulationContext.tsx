@@ -231,20 +231,22 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
     let baseline = currentProfile.baselineEnergyMW;
     let solar = currentProfile.solarMW;
     let wind = currentProfile.windMW;
-    let bPower = 0; // battery power
+    let bPower = currentHour >= 13 && currentHour <= 18 ? 8 : (currentHour >= 1 && currentHour <= 5 ? -6 : 0);
     let soc = 68;
 
     // Operating mode modulations
     if (operatingMode === 'eco_saver') {
-      demand *= 0.94;
+      demand *= 0.84; // 16% reduction via smart lighting & eco-HVAC setpoints
+      bPower = 12; // clean BESS discharge to displace peaker generation
+      soc = 62;
     } else if (operatingMode === 'resilience_peak') {
-      demand *= 0.88;
-      bPower = 18; // discharging to shave peak
-      soc = 52;
+      demand *= 0.79; // 21% reduction via proactive peak shaving
+      bPower = 24; // aggressive 24 MW discharge to evade peak utility tariffs
+      soc = 48;
     } else if (operatingMode === 'crisis_response') {
-      demand *= 0.78;
-      bPower = 28;
-      soc = 41;
+      demand *= 0.68; // 32% load shedding to protect critical feeds
+      bPower = 30; // maximum 30 MW microgrid emergency dispatch
+      soc = 34;
     }
 
     // Shock scenario influence
@@ -269,7 +271,7 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
 
     const netClean = solar + wind;
     const gridImport = Math.max(0, demand - netClean - bPower);
-    const renewableShare = Math.min(100, Math.round(((netClean + bPower) / Math.max(1, demand)) * 100));
+    const renewableShare = Math.min(100, Math.round(((netClean + Math.max(0, bPower)) / Math.max(1, demand)) * 100));
     const peakShaved = Math.max(0, baseline - demand);
 
     return {
@@ -282,9 +284,9 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
       baselineDemandMW: parseFloat(baseline.toFixed(1)),
       peakShavedMW: parseFloat(peakShaved.toFixed(1)),
       renewableSharePct: renewableShare,
-      carbonRateKgPerMWh: Math.round(Math.max(45, (100 - renewableShare) * 3.8)),
+      carbonRateKgPerMWh: Math.round(Math.max(38, (100 - renewableShare) * 3.4)),
     };
-  }, [currentProfile, operatingMode, activeShock, manualOverrides]);
+  }, [currentProfile, operatingMode, activeShock, manualOverrides, currentHour]);
 
   const waterMetrics: WaterMetrics = useMemo(() => {
     let flow = currentProfile.waterDemandM3;
@@ -293,6 +295,27 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
     let resPct = 84.2;
     let leaks = 1;
     let fsmState: WaterMetrics['leakFsmState'] = 'MONITORING';
+    let efficiency = 92.4;
+
+    if (operatingMode === 'eco_saver') {
+      flow *= 0.91; // 9% reduction from non-essential irrigation throttling
+      lossPct *= 0.78; // loss drops to ~12.3%
+      pressure = 3.2; // eco PRV down-modulation
+      efficiency = 95.8;
+      leaks = 0;
+    } else if (operatingMode === 'resilience_peak') {
+      flow *= 0.95;
+      lossPct *= 0.94;
+      pressure = 3.5; // gravity pressure buffer
+      efficiency = 91.0;
+    } else if (operatingMode === 'crisis_response') {
+      flow *= 0.75;
+      lossPct = 10.8;
+      pressure = 4.2; // boosted line pressure for emergency response
+      efficiency = 88.5;
+      leaks = 0;
+      fsmState = 'VALVE_ISOLATED';
+    }
 
     if (activeShock?.id === 'scenario_2_pipe_burst') {
       flow += 450;
@@ -305,11 +328,6 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
       pressure = 4.4;
     }
 
-    if (operatingMode === 'eco_saver') {
-      flow *= 0.95;
-      lossPct *= 0.92;
-    }
-
     return {
       reservoirLevelPct: parseFloat(resPct.toFixed(1)),
       reservoirVolumeM3: Math.round(14500000 * (resPct / 100)),
@@ -318,47 +336,75 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
       activeLeaksDetected: leaks,
       waterLossRatePct: parseFloat(lossPct.toFixed(1)),
       baselineLossPct: 24.8,
-      pumpEfficiencyPct: 92.4,
+      pumpEfficiencyPct: parseFloat(efficiency.toFixed(1)),
       leakFsmState: fsmState,
     };
   }, [currentProfile, operatingMode, activeShock, manualOverrides]);
 
   const wasteMetrics: WasteMetrics = useMemo(() => {
-    const avgFill = currentProfile.wasteFillPct;
+    let avgFill = currentProfile.wasteFillPct;
+    let trucks = 8;
+    let fuelSaved = 29.8;
+    let diversion = 76.4;
+
+    if (operatingMode === 'eco_saver') {
+      trucks = 6; // high-density TSP route clusters
+      fuelSaved = 39.5;
+      diversion = 84.8; // robotic optical sorting boosted
+      avgFill = Math.max(25, avgFill - 6);
+    } else if (operatingMode === 'resilience_peak') {
+      trucks = 7; // off-peak corridor scheduling
+      fuelSaved = 33.2;
+      diversion = 78.0;
+    } else if (operatingMode === 'crisis_response') {
+      trucks = 4; // emergency waste dispatch only
+      fuelSaved = 44.0;
+      diversion = 65.0;
+    }
+
     const thresholdCount = Math.round(avgFill > 60 ? (avgFill - 50) * 4.2 : 8);
 
     return {
-      avgFillLevelPct: avgFill,
+      avgFillLevelPct: Math.round(avgFill),
       binsAboveThreshold: thresholdCount,
       totalSmartBins: 1240,
-      activeTrucks: operatingMode === 'eco_saver' ? 6 : 8,
+      activeTrucks: trucks,
       routeCompletionPct: Math.min(100, Math.round(30 + (currentHour / 24) * 65)),
-      landfillDiversionPct: 76.4,
-      fleetFuelSavedPct: 29.8,
+      landfillDiversionPct: parseFloat(diversion.toFixed(1)),
+      fleetFuelSavedPct: parseFloat(fuelSaved.toFixed(1)),
       dailyCollectedTons: Math.round(180 + (currentHour / 24) * 140),
     };
   }, [currentProfile, operatingMode, currentHour]);
 
   const environmentMetrics: EnvironmentMetrics = useMemo(() => {
     let aqi = currentProfile.aqi;
-    let pm25 = aqi * 0.32;
     let cannons = 2;
     let uhi = 2.8; // urban heat island
 
+    if (operatingMode === 'eco_saver') {
+      aqi = Math.max(16, Math.round(aqi * 0.68)); // crisp clean air
+      cannons = 4;
+      uhi = 2.1;
+    } else if (operatingMode === 'resilience_peak') {
+      aqi = Math.max(22, Math.round(aqi * 0.88));
+      cannons = 6;
+      uhi = 2.4;
+    } else if (operatingMode === 'crisis_response') {
+      aqi = Math.max(20, Math.round(aqi * 0.62));
+      cannons = 16; // full emergency mist cannon scrub
+      uhi = 1.8;
+    }
+
     if (activeShock?.id === 'scenario_3_smog_inversion') {
       aqi = manualOverrides.forceMistCannons ? 88 : 194;
-      pm25 = aqi * 0.42;
       cannons = 16;
     }
 
-    if (operatingMode === 'eco_saver') {
-      aqi = Math.max(18, aqi - 8);
-      pm25 = Math.max(4, pm25 - 3);
-    }
+    let pm25 = parseFloat((aqi * 0.32).toFixed(1));
 
     return {
       cityAqiAvg: Math.round(aqi),
-      pm25UgM3: parseFloat(pm25.toFixed(1)),
+      pm25UgM3: pm25,
       pm10UgM3: parseFloat((pm25 * 1.8).toFixed(1)),
       urbanHeatIslandDeltaC: parseFloat(uhi.toFixed(1)),
       activeMistCannons: manualOverrides.forceMistCannons ? 16 : cannons,
@@ -367,7 +413,7 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [currentProfile, operatingMode, activeShock, manualOverrides, currentHour]);
 
-  // Adjust district metrics dynamically with live multipliers & actuator tunings
+  // Adjust district metrics dynamically with live multipliers, policy mode & actuator tunings
   const districts = useMemo(() => {
     return DISTRICTS_DATA.map(d => {
       let demand = d.metrics.powerDemandMW;
@@ -376,6 +422,23 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
       let pressure = d.metrics.waterPressureBar;
       let leakRisk = d.metrics.leakRiskScore;
       let wasteFill = d.metrics.wasteBinFillPct;
+
+      // Operating Mode policies applied to districts
+      if (operatingMode === 'eco_saver') {
+        demand *= 0.84; // 16% eco-load curtailment
+        aqi = Math.max(14, Math.round(aqi * 0.68)); // clean air improvement
+        pressure = 3.2; // eco pressure setpoint
+        leakRisk = Math.max(2, Math.round(leakRisk * 0.7));
+      } else if (operatingMode === 'resilience_peak') {
+        demand *= 0.79; // active peak load shaving via BESS microgrid
+        pressure = 3.5; // buffer pressure
+        leakRisk = Math.max(4, Math.round(leakRisk * 0.85));
+      } else if (operatingMode === 'crisis_response') {
+        demand *= 0.68; // non-critical load shedding
+        pressure = d.id === 'd1_downtown' || d.id === 'd3_residential' ? 4.2 : 3.4; // priority firefighting/medical pressure
+        aqi = Math.max(18, Math.round(aqi * 0.60)); // mist cannons full scrub
+        leakRisk = 8; // isolated
+      }
 
       // Active district tuning setpoint application
       const tuning = districtTunings[d.id];
@@ -428,7 +491,50 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
         }
       };
     });
-  }, [activeShock, districtTunings]);
+  }, [activeShock, districtTunings, operatingMode]);
+
+  // Dynamic 24-hour profiles reactive to operating mode & shocks
+  const hourlyProfiles = useMemo(() => {
+    return HOURLY_PROFILE_24H.map(p => {
+      let energy = p.optimizedEnergyMW;
+      let water = p.waterDemandM3;
+      let loss = p.waterLossPct;
+      let aqi = p.aqi;
+
+      if (operatingMode === 'eco_saver') {
+        energy *= 0.84;
+        water *= 0.91;
+        loss *= 0.78;
+        aqi = Math.max(16, Math.round(aqi * 0.68));
+      } else if (operatingMode === 'resilience_peak') {
+        energy = p.hour >= 11 && p.hour <= 19 ? energy * 0.75 : energy * 0.88;
+        water *= 0.95;
+        loss *= 0.94;
+        aqi = Math.max(20, Math.round(aqi * 0.88));
+      } else if (operatingMode === 'crisis_response') {
+        energy *= 0.68;
+        water *= 0.75;
+        loss *= 0.65;
+        aqi = Math.max(18, Math.round(aqi * 0.62));
+      }
+
+      if (activeShock?.id === 'scenario_1_heatwave') {
+        energy *= 1.34;
+      } else if (activeShock?.id === 'scenario_2_pipe_burst') {
+        water += 450;
+      } else if (activeShock?.id === 'scenario_3_smog_inversion') {
+        aqi = Math.round(aqi * 2.2);
+      }
+
+      return {
+        ...p,
+        optimizedEnergyMW: parseFloat(energy.toFixed(1)),
+        waterDemandM3: Math.round(water),
+        waterLossPct: parseFloat(loss.toFixed(1)),
+        aqi: Math.round(aqi),
+      };
+    });
+  }, [operatingMode, activeShock]);
 
   // Reactive selected district
   const selectedDistrict = useMemo(() => {
@@ -480,7 +586,7 @@ export const CitySimulationProvider: React.FC<{ children: React.ReactNode }> = (
         wasteMetrics,
         environmentMetrics,
         districts,
-        hourlyProfiles: HOURLY_PROFILE_24H,
+        hourlyProfiles,
       }}
     >
       {children}

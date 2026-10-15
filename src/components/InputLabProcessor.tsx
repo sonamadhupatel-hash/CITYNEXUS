@@ -26,7 +26,9 @@ import {
   CloudRain,
   PieChart,
   BarChart,
-  DollarSign
+  DollarSign,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { SimulationInputDataset, ProcessedSimulationOutput } from '../types/cityos';
 import { generateRandomInputDataset, processSimulationDataset } from '../utils/citySimulationEngine';
@@ -52,6 +54,43 @@ export const InputLabProcessor: React.FC = () => {
 
   // Chart view mode for the 24-hour graph
   const [chartView, setChartView] = useState<'energy' | 'financial_inr' | 'water' | 'aqi'>('energy');
+
+  // Zoom level state for 24-hour simulation graphs (100% to 250%)
+  const [chartZoom, setChartZoom] = useState<number>(1);
+
+  const renderZoomToolbar = (label: string) => (
+    <div className="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800 text-xs shrink-0 shadow-sm">
+      <span className="text-[10px] text-slate-500 font-mono uppercase mr-0.5">Zoom:</span>
+      <button
+        onClick={() => setChartZoom(prev => Math.max(1, parseFloat((prev - 0.25).toFixed(2))))}
+        disabled={chartZoom <= 1}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom Out ${label} (-)`}
+      >
+        <ZoomOut className="w-3.5 h-3.5" />
+      </button>
+      <span className="font-mono text-cyan-300 font-bold px-1 min-w-[38px] text-center text-[11px]">
+        {Math.round(chartZoom * 100)}%
+      </span>
+      <button
+        onClick={() => setChartZoom(prev => Math.min(2.5, parseFloat((prev + 0.25).toFixed(2))))}
+        disabled={chartZoom >= 2.5}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        title={`Zoom In ${label} (+)`}
+      >
+        <ZoomIn className="w-3.5 h-3.5" />
+      </button>
+      {chartZoom > 1 && (
+        <button
+          onClick={() => setChartZoom(1)}
+          className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          title="Reset Zoom to 100%"
+        >
+          <RotateCcw className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
 
   // Quick preset loader
   const handleLoadPreset = (preset: string) => {
@@ -566,7 +605,7 @@ export const InputLabProcessor: React.FC = () => {
                 {formatINR(processedOutput.kpis.dailySavingsINR)}
               </div>
               <div className="text-[11px] text-emerald-400">
-                -{processedOutput.kpis.costReductionPct}% vs unmanaged (₹{formatINR(processedOutput.kpis.baselineDailyCostINR)})
+                -{processedOutput.kpis.costReductionPct}% vs unmanaged ({formatINR(processedOutput.kpis.baselineDailyCostINR)})
               </div>
             </div>
 
@@ -654,76 +693,108 @@ export const InputLabProcessor: React.FC = () => {
             {/* CHART 1A: ENERGY DISPATCH CURVE */}
             {chartView === 'energy' && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
                   <span>Power Grid Dispatch: Unmanaged Baseline Load vs City Nexus Shaved Load (MW)</span>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-500 inline-block" /> Unmanaged Baseline</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-cyan-400 inline-block" /> City Nexus Shaved</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-amber-500/30 border border-amber-400 inline-block" /> Solar PV Yield</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-500 inline-block" /> Unmanaged Baseline</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-cyan-400 inline-block" /> City Nexus Shaved</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-amber-500/30 border border-amber-400 inline-block" /> Solar PV Yield</span>
+                    </div>
+                    {renderZoomToolbar('Power Grid Dispatch')}
                   </div>
                 </div>
 
                 <div className="w-full bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox="0 0 840 230" className="w-full h-auto min-w-[560px] max-h-[290px] block select-none" preserveAspectRatio="xMidYMid meet">
-                      {[0, 50, 100, 150].map((val) => {
-                        const y = 185 - (val / 160) * 155;
-                        return (
-                          <g key={val}>
-                            <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                            <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
-                              {val}MW
+                  {chartZoom > 1 && (
+                    <div className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-md border border-cyan-800/60 mb-2.5 flex items-center justify-between">
+                      <span>↔ Scroll horizontally to inspect all 24-hour dispatch values at {Math.round(chartZoom * 100)}% resolution</span>
+                      <button onClick={() => setChartZoom(1)} className="hover:text-cyan-200 underline">Reset 100%</button>
+                    </div>
+                  )}
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div style={{ width: `${Math.round(100 * chartZoom)}%`, minWidth: `${Math.round(840 * chartZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                      <svg viewBox="0 0 840 230" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
+                        {[0, 50, 100, 150].map((val) => {
+                          const y = 185 - (val / 160) * 155;
+                          return (
+                            <g key={val}>
+                              <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                              <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
+                                {val}MW
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Solar area fill */}
+                        <path
+                          d={`M 58 185 ${processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.solarMW / 160) * 155;
+                            return `L ${x} ${y}`;
+                          }).join(' ')} L 793 185 Z`}
+                          fill="#f59e0b"
+                          fillOpacity="0.18"
+                        />
+
+                        {/* Baseline demand line */}
+                        <polyline
+                          points={processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.baselineEnergyMW / 160) * 155;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="#ef4444"
+                          strokeWidth="2.5"
+                          strokeDasharray="4 2"
+                        />
+
+                        {/* City Nexus Optimized demand line */}
+                        <polyline
+                          points={processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.optimizedEnergyMW / 160) * 155;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="#06b6d4"
+                          strokeWidth="3"
+                        />
+
+                        {/* Exact numerical values on all 24 hours when zoomed in */}
+                        {chartZoom >= 1.25 && processedOutput.hourlyProfile.map((p, idx) => {
+                          const x = 58 + (idx / 23) * 735;
+                          const optY = 185 - (p.optimizedEnergyMW / 160) * 155;
+                          const baseY = 185 - (p.baselineEnergyMW / 160) * 155;
+                          return (
+                            <g key={idx}>
+                              {/* Baseline point & value */}
+                              <circle cx={x} cy={baseY} r="2.5" fill="#ef4444" />
+                              <text x={x} y={baseY - 7} fill="#f87171" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                {p.baselineEnergyMW.toFixed(0)}M
+                              </text>
+                              {/* Optimized point & value */}
+                              <circle cx={x} cy={optY} r="3" fill="#06b6d4" />
+                              <text x={x} y={optY + 11} fill="#22d3ee" fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                {p.optimizedEnergyMW.toFixed(0)}M
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* X Axis Time Labels: full 24 hours when zoomed in, or step when 100% */}
+                        {(chartZoom >= 1.25 ? Array.from({ length: 24 }, (_, i) => i) : [0, 4, 8, 12, 16, 20, 23]).map((hr) => {
+                          const x = 58 + (hr / 23) * 735;
+                          return (
+                            <text key={hr} x={x} y="206" fill="#64748b" fontSize={chartZoom >= 1.25 ? "8.5" : "10"} textAnchor="middle" fontFamily="monospace">
+                              {String(hr).padStart(2, '0')}:00
                             </text>
-                          </g>
-                        );
-                      })}
-
-                      {/* Solar area fill */}
-                      <path
-                        d={`M 58 185 ${processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.solarMW / 160) * 155;
-                          return `L ${x} ${y}`;
-                        }).join(' ')} L 793 185 Z`}
-                        fill="#f59e0b"
-                        fillOpacity="0.18"
-                      />
-
-                      {/* Baseline demand line */}
-                      <polyline
-                        points={processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.baselineEnergyMW / 160) * 155;
-                          return `${x},${y}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeWidth="2.5"
-                        strokeDasharray="4 2"
-                      />
-
-                      {/* City Nexus Optimized demand line */}
-                      <polyline
-                        points={processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.optimizedEnergyMW / 160) * 155;
-                          return `${x},${y}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#06b6d4"
-                        strokeWidth="3"
-                      />
-
-                      {/* X Axis Time Labels */}
-                      {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                        const x = 58 + (hr / 23) * 735;
-                        return (
-                          <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                            {String(hr).padStart(2, '0')}:00
-                          </text>
-                        );
-                      })}
-                    </svg>
+                          );
+                        })}
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -734,83 +805,109 @@ export const InputLabProcessor: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
                   <span>Hourly Financial Cost Comparison: Baseline vs Optimized in Indian Rupees (₹)</span>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-rose-500/50 inline-block rounded-sm" /> Baseline Cost</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-cyan-500/50 inline-block rounded-sm" /> City Nexus Cost</span>
-                    <span className="font-mono text-emerald-400 font-bold">
-                      Daily Savings: ₹{formatINR(processedOutput.kpis.dailySavingsINR)} (-{processedOutput.kpis.costReductionPct}%)
-                    </span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-rose-500/50 inline-block rounded-sm" /> Baseline Cost</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-cyan-500/50 inline-block rounded-sm" /> City Nexus Cost</span>
+                      <span className="font-mono text-emerald-400 font-bold">
+                        Daily Savings: {formatINR(processedOutput.kpis.dailySavingsINR)} (-{processedOutput.kpis.costReductionPct}%)
+                      </span>
+                    </div>
+                    {renderZoomToolbar('Financial Cost Bars')}
                   </div>
                 </div>
 
                 <div className="w-full bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox="0 0 840 230" className="w-full h-auto min-w-[560px] max-h-[290px] block select-none" preserveAspectRatio="xMidYMid meet">
-                      {/* Max hourly cost around ₹4,50,000 */}
-                      {[0, 100000, 200000, 300000, 400000].map((val) => {
-                        const y = 185 - (val / 420000) * 155;
-                        return (
-                          <g key={val}>
-                            <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                            <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
-                              ₹{(val / 100000).toFixed(1)}L
+                  {chartZoom > 1 && (
+                    <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-md border border-emerald-800/60 mb-2.5 flex items-center justify-between">
+                      <span>↔ Scroll horizontally to inspect exact hourly rupee cost & savings values at {Math.round(chartZoom * 100)}% resolution</span>
+                      <button onClick={() => setChartZoom(1)} className="hover:text-emerald-200 underline">Reset 100%</button>
+                    </div>
+                  )}
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div style={{ width: `${Math.round(100 * chartZoom)}%`, minWidth: `${Math.round(840 * chartZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                      <svg viewBox="0 0 840 230" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
+                        {/* Max hourly cost around ₹4,50,000 */}
+                        {[0, 100000, 200000, 300000, 400000].map((val) => {
+                          const y = 185 - (val / 420000) * 155;
+                          return (
+                            <g key={val}>
+                              <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                              <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
+                                ₹{(val / 100000).toFixed(1)}L
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Hourly Cost Bars */}
+                        {processedOutput.hourlyCostProfile.map((cp, idx) => {
+                          const x = 62 + (idx / 23) * 725;
+                          const baseH = Math.min(155, (cp.baselineCostINR / 420000) * 155);
+                          const optH = Math.min(155, (cp.optimizedCostINR / 420000) * 155);
+                          const baseY = 185 - baseH;
+                          const optY = 185 - optH;
+
+                          return (
+                            <g key={idx}>
+                              {/* Baseline cost bar */}
+                              <rect x={x - 7} y={baseY} width="6" height={baseH} fill="#ef4444" fillOpacity="0.45" rx="1">
+                                <title>{`Hour ${String(cp.hour).padStart(2, '0')}:00 - Baseline: ${formatINR(cp.baselineCostINR)}`}</title>
+                              </rect>
+                              {/* Optimized cost bar */}
+                              <rect x={x} y={optY} width="6" height={optH} fill="#06b6d4" fillOpacity="0.85" rx="1">
+                                <title>{`Hour ${String(cp.hour).padStart(2, '0')}:00 - Optimized: ${formatINR(cp.optimizedCostINR)} (Savings: ${formatINR(cp.hourlySavingsINR)})`}</title>
+                              </rect>
+
+                              {/* Exact Numerical rupee values rendered above/near bars when zoomed in */}
+                              {chartZoom >= 1.25 && (
+                                <g>
+                                  <text x={x - 4} y={baseY - 4} fill="#f87171" fontSize="7" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                    ₹{(cp.baselineCostINR / 1000).toFixed(0)}k
+                                  </text>
+                                  <text x={x + 3} y={optY - 4} fill="#22d3ee" fontSize="7" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                    ₹{(cp.optimizedCostINR / 1000).toFixed(0)}k
+                                  </text>
+                                  <text x={x} y={Math.min(baseY, optY) - 12} fill="#34d399" fontSize="6.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                    +₹{(cp.hourlySavingsINR / 1000).toFixed(0)}k
+                                  </text>
+                                </g>
+                              )}
+                            </g>
+                          );
+                        })}
+
+                        {/* X Axis Time Labels */}
+                        {(chartZoom >= 1.25 ? Array.from({ length: 24 }, (_, i) => i) : [0, 4, 8, 12, 16, 20, 23]).map((hr) => {
+                          const x = 65 + (hr / 23) * 725;
+                          return (
+                            <text key={hr} x={x} y="206" fill="#64748b" fontSize={chartZoom >= 1.25 ? "8.5" : "10"} textAnchor="middle" fontFamily="monospace">
+                              {String(hr).padStart(2, '0')}:00
                             </text>
-                          </g>
-                        );
-                      })}
-
-                      {/* Hourly Cost Bars */}
-                      {processedOutput.hourlyCostProfile.map((cp, idx) => {
-                        const x = 62 + (idx / 23) * 725;
-                        const baseH = Math.min(155, (cp.baselineCostINR / 420000) * 155);
-                        const optH = Math.min(155, (cp.optimizedCostINR / 420000) * 155);
-                        const baseY = 185 - baseH;
-                        const optY = 185 - optH;
-
-                        return (
-                          <g key={idx}>
-                            {/* Baseline cost bar */}
-                            <rect x={x - 7} y={baseY} width="6" height={baseH} fill="#ef4444" fillOpacity="0.45" rx="1">
-                              <title>{`Hour ${String(cp.hour).padStart(2, '0')}:00 - Baseline: ₹${formatINR(cp.baselineCostINR)}`}</title>
-                            </rect>
-                            {/* Optimized cost bar */}
-                            <rect x={x} y={optY} width="6" height={optH} fill="#06b6d4" fillOpacity="0.85" rx="1">
-                              <title>{`Hour ${String(cp.hour).padStart(2, '0')}:00 - Optimized: ₹${formatINR(cp.optimizedCostINR)} (Savings: ₹${formatINR(cp.hourlySavingsINR)})`}</title>
-                            </rect>
-                          </g>
-                        );
-                      })}
-
-                      {/* X Axis Time Labels */}
-                      {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                        const x = 65 + (hr / 23) * 725;
-                        return (
-                          <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                            {String(hr).padStart(2, '0')}:00
-                          </text>
-                        );
-                      })}
-                    </svg>
+                          );
+                        })}
+                      </svg>
+                    </div>
                   </div>
-                </div>
 
-                {/* Numerical Savings Summary Breakdown */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono pt-1">
-                  <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-slate-500 block text-[10px]">Unmanaged Baseline Cost</span>
-                    <span className="text-rose-400 font-bold">₹{formatINR(processedOutput.kpis.baselineDailyCostINR)} / day</span>
-                  </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-slate-500 block text-[10px]">City Nexus Optimized Cost</span>
-                    <span className="text-cyan-300 font-bold">₹{formatINR(processedOutput.kpis.optimizedDailyCostINR)} / day</span>
-                  </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-slate-500 block text-[10px]">Daily Net Operational Savings</span>
-                    <span className="text-emerald-400 font-bold">₹{formatINR(processedOutput.kpis.dailySavingsINR)} (-{processedOutput.kpis.costReductionPct}%)</span>
-                  </div>
-                  <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
-                    <span className="text-slate-500 block text-[10px]">Projected Annual Savings</span>
-                    <span className="text-emerald-300 font-bold">₹{formatINR(processedOutput.kpis.dailySavingsINR * 365)} / yr</span>
+                  {/* Numerical Savings Summary Breakdown */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono pt-3 border-t border-slate-800/80 mt-2">
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Unmanaged Baseline Cost</span>
+                      <span className="text-rose-400 font-bold">{formatINR(processedOutput.kpis.baselineDailyCostINR)} / day</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">City Nexus Optimized Cost</span>
+                      <span className="text-cyan-300 font-bold">{formatINR(processedOutput.kpis.optimizedDailyCostINR)} / day</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Daily Net Operational Savings</span>
+                      <span className="text-emerald-400 font-bold">{formatINR(processedOutput.kpis.dailySavingsINR)} (-{processedOutput.kpis.costReductionPct}%)</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Projected Annual Savings</span>
+                      <span className="text-emerald-300 font-bold">{formatINR(processedOutput.kpis.dailySavingsINR * 365)} / yr</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -819,75 +916,105 @@ export const InputLabProcessor: React.FC = () => {
             {/* CHART 1C: WATER FLOW & PIPELINE LOSS */}
             {chartView === 'water' && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
                   <span>Municipal Water Consumption Demand (m³/h) and Pipeline Loss Rate (%)</span>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-blue-500/20 border border-blue-400 inline-block" /> Demand Volume (m³/h)</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-400 inline-block" /> Water Loss %</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-blue-500/20 border border-blue-400 inline-block" /> Demand Volume (m³/h)</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-400 inline-block" /> Water Loss %</span>
+                    </div>
+                    {renderZoomToolbar('Water Flow & Loss')}
                   </div>
                 </div>
 
                 <div className="w-full bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox="0 0 840 230" className="w-full h-auto min-w-[560px] max-h-[290px] block select-none" preserveAspectRatio="xMidYMid meet">
-                      {[0, 4000, 8000, 12000, 16000].map((val) => {
-                        const y = 185 - (val / 16000) * 155;
-                        return (
-                          <g key={val}>
-                            <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                            <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
-                              {val}m³
+                  {chartZoom > 1 && (
+                    <div className="text-[10px] font-mono text-blue-400 bg-blue-950/40 px-3 py-1 rounded-md border border-blue-800/60 mb-2.5 flex items-center justify-between">
+                      <span>↔ Scroll horizontally to inspect water consumption and loss percentage values at {Math.round(chartZoom * 100)}% resolution</span>
+                      <button onClick={() => setChartZoom(1)} className="hover:text-blue-200 underline">Reset 100%</button>
+                    </div>
+                  )}
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div style={{ width: `${Math.round(100 * chartZoom)}%`, minWidth: `${Math.round(840 * chartZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                      <svg viewBox="0 0 840 230" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
+                        {[0, 4000, 8000, 12000, 16000].map((val) => {
+                          const y = 185 - (val / 16000) * 155;
+                          return (
+                            <g key={val}>
+                              <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                              <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
+                                {val}m³
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Water flow area */}
+                        <path
+                          d={`M 58 185 ${processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.waterDemandM3 / 16000) * 155;
+                            return `L ${x} ${y}`;
+                          }).join(' ')} L 793 185 Z`}
+                          fill="#3b82f6"
+                          fillOpacity="0.2"
+                        />
+
+                        {/* Water flow line */}
+                        <polyline
+                          points={processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.waterDemandM3 / 16000) * 155;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="#60a5fa"
+                          strokeWidth="2.5"
+                        />
+
+                        {/* Loss % line (Scaled to right axis) */}
+                        <polyline
+                          points={processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.waterLossPct / 30) * 155;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="#f43f5e"
+                          strokeWidth="2"
+                          strokeDasharray="4 2"
+                        />
+
+                        {/* Exact numerical values on all 24 hours when zoomed in */}
+                        {chartZoom >= 1.25 && processedOutput.hourlyProfile.map((p, idx) => {
+                          const x = 58 + (idx / 23) * 735;
+                          const flowY = 185 - (p.waterDemandM3 / 16000) * 155;
+                          const lossY = 185 - (p.waterLossPct / 30) * 155;
+                          return (
+                            <g key={idx}>
+                              <circle cx={x} cy={flowY} r="3" fill="#60a5fa" />
+                              <text x={x} y={flowY - 7} fill="#93c5fd" fontSize="7.5" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                {(p.waterDemandM3 / 1000).toFixed(1)}k
+                              </text>
+                              <circle cx={x} cy={lossY} r="2.5" fill="#f43f5e" />
+                              <text x={x} y={lossY + 11} fill="#fb7185" fontSize="7" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                {p.waterLossPct.toFixed(1)}%
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* X Axis */}
+                        {(chartZoom >= 1.25 ? Array.from({ length: 24 }, (_, i) => i) : [0, 4, 8, 12, 16, 20, 23]).map((hr) => {
+                          const x = 58 + (hr / 23) * 735;
+                          return (
+                            <text key={hr} x={x} y="206" fill="#64748b" fontSize={chartZoom >= 1.25 ? "8.5" : "10"} textAnchor="middle" fontFamily="monospace">
+                              {String(hr).padStart(2, '0')}:00
                             </text>
-                          </g>
-                        );
-                      })}
-
-                      {/* Water flow area */}
-                      <path
-                        d={`M 58 185 ${processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.waterDemandM3 / 16000) * 155;
-                          return `L ${x} ${y}`;
-                        }).join(' ')} L 793 185 Z`}
-                        fill="#3b82f6"
-                        fillOpacity="0.2"
-                      />
-
-                      {/* Water flow line */}
-                      <polyline
-                        points={processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.waterDemandM3 / 16000) * 155;
-                          return `${x},${y}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#60a5fa"
-                        strokeWidth="2.5"
-                      />
-
-                      {/* Loss % line (Scaled to right axis) */}
-                      <polyline
-                        points={processedOutput.hourlyProfile.map((p, idx) => {
-                          const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.waterLossPct / 30) * 155;
-                          return `${x},${y}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#f43f5e"
-                        strokeWidth="2"
-                        strokeDasharray="4 2"
-                      />
-
-                      {/* X Axis */}
-                      {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                        const x = 58 + (hr / 23) * 735;
-                        return (
-                          <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                            {String(hr).padStart(2, '0')}:00
-                          </text>
-                        );
-                      })}
-                    </svg>
+                          );
+                        })}
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -896,54 +1023,80 @@ export const InputLabProcessor: React.FC = () => {
             {/* CHART 1D: AQI DISPERSION & HEALTH THRESHOLD */}
             {chartView === 'aqi' && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
                   <span>Atmospheric Particulate AQI Trajectory with EPA 100 Moderate Safety Threshold</span>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-amber-400 inline-block" /> Citywide AQI</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unhealthy Limit (100)</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-amber-400 inline-block" /> Citywide AQI</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-rose-500 inline-block stroke-dash" /> Unhealthy Limit (100)</span>
+                    </div>
+                    {renderZoomToolbar('AQI Dispersion')}
                   </div>
                 </div>
 
                 <div className="w-full bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80 overflow-hidden relative shadow-inner">
-                  <div className="w-full overflow-x-auto">
-                    <svg viewBox="0 0 840 230" className="w-full h-auto min-w-[560px] max-h-[290px] block select-none" preserveAspectRatio="xMidYMid meet">
-                      {[0, 50, 100, 150, 200].map((val) => {
-                        const y = 185 - (val / 220) * 155;
-                        return (
-                          <g key={val}>
-                            <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
-                            <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
-                              {val}
-                            </text>
-                          </g>
-                        );
-                      })}
+                  {chartZoom > 1 && (
+                    <div className="text-[10px] font-mono text-amber-400 bg-amber-950/40 px-3 py-1 rounded-md border border-amber-800/60 mb-2.5 flex items-center justify-between">
+                      <span>↔ Scroll horizontally to inspect atmospheric particulate AQI values at {Math.round(chartZoom * 100)}% resolution</span>
+                      <button onClick={() => setChartZoom(1)} className="hover:text-amber-200 underline">Reset 100%</button>
+                    </div>
+                  )}
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div style={{ width: `${Math.round(100 * chartZoom)}%`, minWidth: `${Math.round(840 * chartZoom)}px`, transition: 'all 0.2s ease-out' }}>
+                      <svg viewBox="0 0 840 230" className="w-full h-auto max-h-[300px] block select-none" preserveAspectRatio="none">
+                        {[0, 50, 100, 150, 200].map((val) => {
+                          const y = 185 - (val / 220) * 155;
+                          return (
+                            <g key={val}>
+                              <line x1="58" y1={y} x2="800" y2={y} stroke="#1e293b" strokeWidth="1" strokeDasharray="4 4" />
+                              <text x="50" y={y + 3.5} fill="#64748b" fontSize="10" textAnchor="end" fontFamily="monospace">
+                                {val}
+                              </text>
+                            </g>
+                          );
+                        })}
 
-                      {/* Threshold line 100 */}
-                      <line x1="58" y1={185 - (100 / 220) * 155} x2="800" y2={185 - (100 / 220) * 155} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" />
+                        {/* Threshold line 100 */}
+                        <line x1="58" y1={185 - (100 / 220) * 155} x2="800" y2={185 - (100 / 220) * 155} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" />
 
-                      {/* AQI Trajectory */}
-                      <polyline
-                        points={processedOutput.hourlyProfile.map((p, idx) => {
+                        {/* AQI Trajectory */}
+                        <polyline
+                          points={processedOutput.hourlyProfile.map((p, idx) => {
+                            const x = 58 + (idx / 23) * 735;
+                            const y = 185 - (p.aqi / 220) * 155;
+                            return `${x},${y}`;
+                          }).join(' ')}
+                          fill="none"
+                          stroke="#f59e0b"
+                          strokeWidth="3"
+                        />
+
+                        {/* Exact numerical AQI values at all 24 hours when zoomed in */}
+                        {chartZoom >= 1.25 && processedOutput.hourlyProfile.map((p, idx) => {
                           const x = 58 + (idx / 23) * 735;
-                          const y = 185 - (p.aqi / 220) * 155;
-                          return `${x},${y}`;
-                        }).join(' ')}
-                        fill="none"
-                        stroke="#f59e0b"
-                        strokeWidth="3"
-                      />
+                          const aqiY = 185 - (p.aqi / 220) * 155;
+                          const aqiColor = p.aqi <= 50 ? '#34d399' : p.aqi <= 100 ? '#fcd34d' : '#f87171';
+                          return (
+                            <g key={idx}>
+                              <circle cx={x} cy={aqiY} r="3" fill="#f59e0b" />
+                              <text x={x} y={aqiY - 7} fill={aqiColor} fontSize="8" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+                                {p.aqi}
+                              </text>
+                            </g>
+                          );
+                        })}
 
-                      {/* X Axis */}
-                      {[0, 4, 8, 12, 16, 20, 23].map((hr) => {
-                        const x = 58 + (hr / 23) * 735;
-                        return (
-                          <text key={hr} x={x} y="206" fill="#64748b" fontSize="10" textAnchor="middle" fontFamily="monospace">
-                            {String(hr).padStart(2, '0')}:00
-                          </text>
-                        );
-                      })}
-                    </svg>
+                        {/* X Axis */}
+                        {(chartZoom >= 1.25 ? Array.from({ length: 24 }, (_, i) => i) : [0, 4, 8, 12, 16, 20, 23]).map((hr) => {
+                          const x = 58 + (hr / 23) * 735;
+                          return (
+                            <text key={hr} x={x} y="206" fill="#64748b" fontSize={chartZoom >= 1.25 ? "8.5" : "10"} textAnchor="middle" fontFamily="monospace">
+                              {String(hr).padStart(2, '0')}:00
+                            </text>
+                          );
+                        })}
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1059,7 +1212,7 @@ export const InputLabProcessor: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex justify-between text-[11px]">
                     <span className="text-slate-300">Daily Operating Cost (INR):</span>
-                    <span className="font-mono text-amber-300 font-bold">₹{formatINR(processedOutput.kpis.optimizedDailyCostINR)} vs ₹{formatINR(processedOutput.kpis.baselineDailyCostINR)} (-{processedOutput.kpis.costReductionPct}%)</span>
+                    <span className="font-mono text-amber-300 font-bold">{formatINR(processedOutput.kpis.optimizedDailyCostINR)} vs {formatINR(processedOutput.kpis.baselineDailyCostINR)} (-{processedOutput.kpis.costReductionPct}%)</span>
                   </div>
                   <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden flex">
                     <div style={{ width: `${(processedOutput.kpis.optimizedDailyCostINR / processedOutput.kpis.baselineDailyCostINR) * 100}%` }} className="bg-amber-400 h-full" />
